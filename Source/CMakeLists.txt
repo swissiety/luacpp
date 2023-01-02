@@ -25,13 +25,53 @@ set(SOURCE_FILES
 	LuaMetaObject.cpp LuaMetaObject.hpp
 )
 
+
+# find and update all submodules (i.e. repos/libraries) of this git
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
+# Update submodules as needed
+    option(GIT_SUBMODULE "Check submodules during build" ON)
+    if(GIT_SUBMODULE)
+        message(STATUS "Submodule update")
+        execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+                        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                        RESULT_VARIABLE GIT_SUBMOD_RESULT)
+        if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+            message(FATAL_ERROR "git submodule update --init --recursive failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
+        endif()
+    endif()
+endif()
+
+
 include(GNUInstallDirs)
 
-find_package(Lua REQUIRED)
+find_package(Lua 5.4 QUIET)
+
+if (NOT LUA_FOUND)
+    
+    set(LUA_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua/liblua.a)
+    set(LUA_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua/)   #include
+
+    add_custom_command(
+        COMMENT "compile lua from sources mirror repo   "
+        OUTPUT ${LUA_PATH} #${LUA_INCLUDE_DIR}/*.h
+        COMMAND make
+        #COMMAND cp ${LUA_INCLUDE_DIR}/../*.h ${LUA_INCLUDE_DIR} 
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua
+        VERBATIM
+    )
+
+    add_library(Lua ${LUA_PATH})
+    target_link_libraries(Lua dl)
+    set_target_properties(Lua PROPERTIES LINKER_LANGUAGE CXX)
+    set(LUA_LIBRARIES Lua ${LUA_PATH})
+
+endif()
+
 
 include_directories(example_HelloLua PRIVATE ${LUA_INCLUDE_DIR})
 
-add_library(luacpp SHARED ${SOURCE_FILES})
+add_library(luacpp  ${SOURCE_FILES})
 add_library(luacpp_static STATIC ${SOURCE_FILES})
 set_target_properties(luacpp_static PROPERTIES OUTPUT_NAME luacpp)
 target_link_libraries(luacpp ${LUA_LIBRARIES})

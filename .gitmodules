@@ -1,0 +1,6 @@
+[submodule "Source/libs/lua-cmake"]
+	path = Source/libs/lua-cmake
+	url = https://github.com/lubgr/lua-cmake.git
+[submodule "libs/lua"]
+	path = libs/lua
+	url = https://github.com/lua/lua.git
