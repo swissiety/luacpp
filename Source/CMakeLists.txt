@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.9)
 project(LuaCpp)
 
-option(INSTALL_LIB "Install Library" OFF)
+option(INSTALL_LIB "Install Library" ON)
 #option(BUILD_SHARED "Build Shared Library" ON)
 #option(BUILD_STATIC "Build Static Library" ON)
-option(BUILD_TEST "Build Tests" OFF)
+option(BUILD_TEST "Build Tests" ON)
 option(BUILD_DOC "Build documentation" OFF)
-option(BUILD_EXAMPLE "Build Hello World Example" OFF)
+option(BUILD_EXAMPLE "Build Hello World Example" ON)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -60,7 +60,7 @@ if (NOT LUA_FOUND)
     add_custom_command(
         COMMENT "compile lua from lua sources mirror repo"
         OUTPUT ${LUA_PATH} #${LUA_INCLUDE_DIR}/*.h
-        COMMAND make #ARGS MYCXXFLAGS=-fPIC
+        COMMAND make ARGS MYCFLAGS="-fPIC"
      #   COMMAND mkdir ARGS -p ${LUA_INCLUDE_DIR} 
      #   COMMAND cp ARGS ${LUA_INCLUDE_DIR}/../*.h ${LUA_INCLUDE_DIR} 
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua
@@ -68,7 +68,9 @@ if (NOT LUA_FOUND)
     )
 
     add_library(Lua ${LUA_PATH})
-    target_link_libraries(Lua dl)
+    if (UNIX)
+        target_link_libraries(Lua dl)
+    endif (UNIX)
     set_target_properties(Lua PROPERTIES LINKER_LANGUAGE CXX)
     #target_include_directories(Lua PUBLIC ${LUA_INCLUDE_DIR})
 
