@@ -50,13 +50,14 @@ find_package(Lua 5.4 QUIET)
 if (NOT LUA_FOUND)
     
     set(LUA_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua/liblua.a)
-    set(LUA_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua/)   #include
+    set(LUA_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua) #/include )
 
     add_custom_command(
         COMMENT "compile lua from sources mirror repo   "
         OUTPUT ${LUA_PATH} #${LUA_INCLUDE_DIR}/*.h
         COMMAND make
-        #COMMAND cp ${LUA_INCLUDE_DIR}/../*.h ${LUA_INCLUDE_DIR} 
+     #   COMMAND mkdir ARGS -p ${LUA_INCLUDE_DIR} 
+     #   COMMAND cp ARGS ${LUA_INCLUDE_DIR}/../*.h ${LUA_INCLUDE_DIR} 
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua
         VERBATIM
     )
@@ -71,7 +72,7 @@ endif()
 
 include_directories(example_HelloLua PRIVATE ${LUA_INCLUDE_DIR})
 
-add_library(luacpp  ${SOURCE_FILES})
+add_library(luacpp SHARED ${SOURCE_FILES})
 add_library(luacpp_static STATIC ${SOURCE_FILES})
 set_target_properties(luacpp_static PROPERTIES OUTPUT_NAME luacpp)
 target_link_libraries(luacpp ${LUA_LIBRARIES})
@@ -285,27 +286,29 @@ endif()
 option(BUILD_DOC "Build documentation" OFF)
 
 # check if Doxygen is installed
-find_package(Doxygen)
-if (DOXYGEN_FOUND)
-    # set input and output files
-    set(DOXYGEN_IN ${PROJECT_SOURCE_DIR}/../docs/Doxyfile.in)
-    set(DOXYGEN_OUT ${PROJECT_BINARY_DIR}/Doxyfile)
+if(BUILD_DOC)
+    find_package(Doxygen QUIET)
+    if (DOXYGEN_FOUND)
+        # set input and output files
+        set(DOXYGEN_IN ${PROJECT_SOURCE_DIR}/../docs/Doxyfile.in)
+        set(DOXYGEN_OUT ${PROJECT_BINARY_DIR}/Doxyfile)
 
-    # request to configure the file
-    configure_file(${DOXYGEN_IN} ${DOXYGEN_OUT} @ONLY)
-    message("Doxygen build started")
+        # request to configure the file
+        configure_file(${DOXYGEN_IN} ${DOXYGEN_OUT} @ONLY)
+        message("Doxygen build started")
 
-    # note the option ALL which allows to build the docs together with the application
-    add_custom_target( doc_doxygen
-        COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
-	WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-        COMMENT "Generating API documentation with Doxygen"
-        VERBATIM )
-    add_custom_target( doc_pdf
-	COMMAND cd doc_doxygen/latex && make pdf
-	COMMAND mv doc_doxygen/latex/refman.pdf ${CMAKE_BINARY_DIR}/luacpp.pdf
-	DEPENDS doc_doxygen
-    )
-else (DOXYGEN_FOUND)
-  message("Doxygen need to be installed to generate the doxygen documentation")
-endif (DOXYGEN_FOUND)
+        # note the option ALL which allows to build the docs together with the application
+        add_custom_target( doc_doxygen
+            COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
+        WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+            COMMENT "Generating API documentation with Doxygen"
+            VERBATIM )
+        add_custom_target( doc_pdf
+        COMMAND cd doc_doxygen/latex && make pdf
+        COMMAND mv doc_doxygen/latex/refman.pdf ${CMAKE_BINARY_DIR}/luacpp.pdf
+        DEPENDS doc_doxygen
+        )
+    else (DOXYGEN_FOUND)
+    message("Doxygen need to be installed to generate the doxygen documentation")
+    endif (DOXYGEN_FOUND)
+endif(BUILD_DOC)
