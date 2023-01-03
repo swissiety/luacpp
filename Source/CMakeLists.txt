@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.9)
 project(LuaCpp)
 
+option(INSTALL_LIB "Install Library" OFF)
+#option(BUILD_SHARED "Build Shared Library" ON)
+#option(BUILD_STATIC "Build Static Library" ON)
+option(BUILD_TEST "Build Tests" OFF)
+option(BUILD_DOC "Build documentation" OFF)
+option(BUILD_EXAMPLE "Build Hello World Example" OFF)
+
 set(CMAKE_CXX_STANDARD 17)
 
 # Source files
@@ -26,36 +33,34 @@ set(SOURCE_FILES
 )
 
 
-# find and update all submodules (i.e. repos/libraries) of this git
-find_package(Git QUIET)
-if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
-# Update submodules as needed
-    option(GIT_SUBMODULE "Check submodules during build" ON)
-    if(GIT_SUBMODULE)
-        message(STATUS "Submodule update")
-        execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
-                        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                        RESULT_VARIABLE GIT_SUBMOD_RESULT)
-        if(NOT GIT_SUBMOD_RESULT EQUAL "0")
-            message(FATAL_ERROR "git submodule update --init --recursive failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
-        endif()
-    endif()
-endif()
-
-
 include(GNUInstallDirs)
 
 find_package(Lua 5.4 QUIET)
 
 if (NOT LUA_FOUND)
-    
+    # find and update all submodules (i.e. repos/libraries) of this git
+    find_package(Git QUIET)
+    if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
+    # Update submodules as needed
+        option(GIT_SUBMODULE "Check submodules during build" ON)
+        if(GIT_SUBMODULE)
+            message(STATUS "Submodule update")
+            execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+                            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                            RESULT_VARIABLE GIT_SUBMOD_RESULT)
+            if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+                message(FATAL_ERROR "git submodule update --init --recursive failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
+            endif()
+        endif()
+    endif()
+
     set(LUA_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua/liblua.a)
     set(LUA_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua) #/include )
 
     add_custom_command(
-        COMMENT "compile lua from sources mirror repo   "
+        COMMENT "compile lua from lua sources mirror repo"
         OUTPUT ${LUA_PATH} #${LUA_INCLUDE_DIR}/*.h
-        COMMAND make
+        COMMAND make #ARGS MYCXXFLAGS=-fPIC
      #   COMMAND mkdir ARGS -p ${LUA_INCLUDE_DIR} 
      #   COMMAND cp ARGS ${LUA_INCLUDE_DIR}/../*.h ${LUA_INCLUDE_DIR} 
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../libs/lua
@@ -65,225 +70,234 @@ if (NOT LUA_FOUND)
     add_library(Lua ${LUA_PATH})
     target_link_libraries(Lua dl)
     set_target_properties(Lua PROPERTIES LINKER_LANGUAGE CXX)
+    #target_include_directories(Lua PUBLIC ${LUA_INCLUDE_DIR})
+
     set(LUA_LIBRARIES Lua ${LUA_PATH})
 
 endif()
 
+#if(BUILD_SHARED OR BUILD_EXAMPLE) #etc..
+    add_library(luacpp SHARED ${SOURCE_FILES})
+    target_link_libraries(luacpp ${LUA_LIBRARIES})
+    target_include_directories(luacpp PRIVATE ${LUA_INCLUDE_DIR})
+#endif()
 
-include_directories(example_HelloLua PRIVATE ${LUA_INCLUDE_DIR})
-
-add_library(luacpp SHARED ${SOURCE_FILES})
-add_library(luacpp_static STATIC ${SOURCE_FILES})
-set_target_properties(luacpp_static PROPERTIES OUTPUT_NAME luacpp)
-target_link_libraries(luacpp ${LUA_LIBRARIES})
-target_link_libraries(luacpp_static ${LUA_LIBRARIES})
-
+#if(BUILD_STATIC OR BUILD_EXAMPLE)  #etc..
+    add_library(luacpp_static STATIC ${SOURCE_FILES})
+    set_target_properties(luacpp_static PROPERTIES OUTPUT_NAME luacpp)
+    target_link_libraries(luacpp_static ${LUA_LIBRARIES})
+    target_include_directories(luacpp_static PRIVATE ${LUA_INCLUDE_DIR})
+#endif()
 
 ##########
 # Examples
 ##########
-add_executable(example_helloworld Example/example_helloworld.cpp)
-target_link_libraries(example_helloworld luacpp)
+if(BUILD_EXAMPLE)
+    include_directories(example_HelloLua PRIVATE ${LUA_INCLUDE_DIR})
 
-add_executable(example_LuaLibrary Example/example_LuaLibrary.cpp)
-target_link_libraries(example_LuaLibrary luacpp)
+    add_executable(example_helloworld Example/example_helloworld.cpp)
+    target_link_libraries(example_helloworld luacpp)
 
-add_executable(example_LuaMetaObject Example/example_LuaMetaObject.cpp)
-target_link_libraries(example_LuaMetaObject luacpp)
+    add_executable(example_LuaLibrary Example/example_LuaLibrary.cpp)
+    target_link_libraries(example_LuaLibrary luacpp)
 
-add_custom_command(TARGET example_helloworld POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/Example/hello.lua ${PROJECT_BINARY_DIR}/hello.lua
-	COMMENT "${PROJECT_BINARY_DIR}/hello.lua copied to build" 
-)
+    add_executable(example_LuaMetaObject Example/example_LuaMetaObject.cpp)
+    target_link_libraries(example_LuaMetaObject luacpp)
+
+    add_custom_command(TARGET example_helloworld POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/Example/hello.lua ${PROJECT_BINARY_DIR}/hello.lua
+        COMMENT "${PROJECT_BINARY_DIR}/hello.lua copied to build" 
+    )
+endif()
 
 #########
 # Install
 #########
-include(CMakePackageConfigHelpers)
+if(INSTALL_LIB)
+    include(CMakePackageConfigHelpers)
 
-set(CMAKE_CONFIG_DEST "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/cmake")
-set(LuaCpp_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}")
-set(LuaCpp_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}")
+    set(CMAKE_CONFIG_DEST "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/cmake")
+    set(LuaCpp_INCLUDE_DIR "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}")
+    set(LuaCpp_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}")
 
-install(TARGETS luacpp
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    install(TARGETS luacpp
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-install(TARGETS luacpp_static
-        DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    install(TARGETS luacpp_static
+            DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-install(FILES LuaCpp.hpp Lua.hpp LuaContext.hpp LuaMetaObject.hpp LuaVersion.hpp 
-	DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}")
+    install(FILES LuaCpp.hpp Lua.hpp LuaContext.hpp LuaMetaObject.hpp LuaVersion.hpp 
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}")
 
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/Registry ${CMAKE_SOURCE_DIR}/Engine
-	DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
-        FILES_MATCHING
-        PATTERN "*.hpp"
-)
-configure_package_config_file(
-	LuaCppConfig.cmake.in
-	${CMAKE_CURRENT_BINARY_DIR}/LuaCppConfig.cmake
-	INSTALL_DESTINATION "${CMAKE_CONFIG_DEST}"
-	PATH_VARS
-		LuaCpp_INCLUDE_DIR
-		LuaCpp_INSTALL_LIBDIR
-)
-write_basic_package_version_file(
-	${CMAKE_CURRENT_BINARY_DIR}/LuaCppConfigVersion.cmake
-  	VERSION 0.1.0
-  	COMPATIBILITY SameMajorVersion
-	ARCH_INDEPENDENT
-)
-install(FILES
-	${CMAKE_CURRENT_BINARY_DIR}/LuaCppConfigVersion.cmake
-	${CMAKE_CURRENT_BINARY_DIR}/LuaCppConfig.cmake
-	DESTINATION ${CMAKE_CONFIG_DEST}
-)
-
+    install(DIRECTORY ${CMAKE_SOURCE_DIR}/Registry ${CMAKE_SOURCE_DIR}/Engine
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
+            FILES_MATCHING
+            PATTERN "*.hpp"
+    )
+    configure_package_config_file(
+        LuaCppConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/LuaCppConfig.cmake
+        INSTALL_DESTINATION "${CMAKE_CONFIG_DEST}"
+        PATH_VARS
+            LuaCpp_INCLUDE_DIR
+            LuaCpp_INSTALL_LIBDIR
+    )
+    write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/LuaCppConfigVersion.cmake
+        VERSION 0.1.0
+        COMPATIBILITY SameMajorVersion
+        ARCH_INDEPENDENT
+    )
+    install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/LuaCppConfigVersion.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/LuaCppConfig.cmake
+        DESTINATION ${CMAKE_CONFIG_DEST}
+    )
+endif(INSTALL_LIB)
 #########
 # Testing
 #########
-enable_testing()
-# Install Google test library
-set(GOOGLETEST_INSTALL "${CMAKE_CURRENT_BINARY_DIR}/googletest-install")
-set(GOOGLETEST_INCLUDE "${GOOGLETEST_INSTALL}/include")
-include(ExternalProject)
-ExternalProject_Add(googletest
-  GIT_REPOSITORY    https://github.com/google/googletest.git
-  GIT_TAG           main
-  SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-src"
-  BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-build"
-  CMAKE_ARGS        -DCMAKE_INSTALL_PREFIX=${GOOGLETEST_INSTALL} -DINCLUDE_INSTALL_DIR=${GOOGLETEST_INSTALL}
-  TEST_COMMAND      ""
-)
-link_directories(${GOOGLETEST_INSTALL}/lib)
-include_directories(${GOOGLETEST_INSTALL}/include)
-include(GoogleTest)
+if(BUILD_TEST)
+    enable_testing()
+    # Install Google test library
+    set(GOOGLETEST_INSTALL "${CMAKE_CURRENT_BINARY_DIR}/googletest-install")
+    set(GOOGLETEST_INCLUDE "${GOOGLETEST_INSTALL}/include")
+    include(ExternalProject)
+    ExternalProject_Add(googletest
+    GIT_REPOSITORY    https://github.com/google/googletest.git
+    GIT_TAG           main
+    SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-src"
+    BINARY_DIR        "${CMAKE_CURRENT_BINARY_DIR}/googletest-build"
+    CMAKE_ARGS        -DCMAKE_INSTALL_PREFIX=${GOOGLETEST_INSTALL} -DINCLUDE_INSTALL_DIR=${GOOGLETEST_INSTALL}
+    TEST_COMMAND      ""
+    )
+    link_directories(${GOOGLETEST_INSTALL}/lib)
+    include_directories(${GOOGLETEST_INSTALL}/include)
+    include(GoogleTest)
 
-add_executable(testLuaContext UnitTest/TestLuaContext.cpp)
-add_dependencies(testLuaContext googletest)
-target_link_libraries(testLuaContext luacpp_static gtest_main gtest pthread)
-gtest_discover_tests(testLuaContext)
+    add_executable(testLuaContext UnitTest/TestLuaContext.cpp)
+    add_dependencies(testLuaContext googletest)
+    target_link_libraries(testLuaContext luacpp_static gtest_main gtest pthread)
+    gtest_discover_tests(testLuaContext)
 
-add_executable(testLuaTypes UnitTest/TestLuaTypes.cpp)
-add_dependencies(testLuaTypes googletest)
-target_link_libraries(testLuaTypes luacpp_static gtest_main gtest pthread)
-gtest_discover_tests(testLuaTypes)
+    add_executable(testLuaTypes UnitTest/TestLuaTypes.cpp)
+    add_dependencies(testLuaTypes googletest)
+    target_link_libraries(testLuaTypes luacpp_static gtest_main gtest pthread)
+    gtest_discover_tests(testLuaTypes)
 
-add_executable(testLuaCompiler UnitTest/TestLuaCompiler.cpp)
-add_dependencies(testLuaCompiler googletest)
-target_link_libraries(testLuaCompiler luacpp_static gtest_main gtest pthread)
-gtest_discover_tests(testLuaCompiler)
+    add_executable(testLuaCompiler UnitTest/TestLuaCompiler.cpp)
+    add_dependencies(testLuaCompiler googletest)
+    target_link_libraries(testLuaCompiler luacpp_static gtest_main gtest pthread)
+    gtest_discover_tests(testLuaCompiler)
 
-add_executable(testLuaMetaObject UnitTest/TestLuaMetaObject.cpp)
-add_dependencies(testLuaMetaObject googletest)
-target_link_libraries(testLuaMetaObject luacpp_static gtest_main gtest pthread)
-gtest_discover_tests(testLuaMetaObject)
-
-
-#############
-# Memory Test
-#############
-find_program(valgrind valgrind)
-
-if (valgrind)
-	message(STATUS "Found command 'valgrand' => Use target 'test_memory' to perform memory test")
-	add_custom_target( test_memory
-		COMMAND valgrind -v --run-cxx-freeres=yes --run-libc-freeres=yes make test 
-	)
-else()
-	message(WARNING "Cannot find command 'valgrand' => Please install package 'valgrand' to run memory tests")
-endif()
+    add_executable(testLuaMetaObject UnitTest/TestLuaMetaObject.cpp)
+    add_dependencies(testLuaMetaObject googletest)
+    target_link_libraries(testLuaMetaObject luacpp_static gtest_main gtest pthread)
+    gtest_discover_tests(testLuaMetaObject)
 
 
-##########
-# Coverage
-##########
+    #############
+    # Memory Test
+    #############
+    find_program(valgrind valgrind)
 
-if( CMAKE_BUILD_TYPE STREQUAL "Coverage" )
-    if( NOT CMAKE_COMPILER_IS_GNUCXX AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang" )
-        message(WARNING "Coverage not yet implemented for your compiler '${CMAKE_CXX_COMPILER_ID}' (only GNU and Clang)")
-        return()
-    endif()
-
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
-
-    find_program (gcovr gcovr)
-    find_program (lcov lcov)
-
-    if (gcovr)
-	message (STATUS "Found command 'gcovr' => Use target 'coverage-html' or 'coverage-cli' to generate coverage report '${CMAKE_BINARY_DIR}/gcovr.html'")
-	add_custom_target (coverage-html
-	    COMMAND make test
-            COMMAND ${gcovr} --root             ${CMAKE_SOURCE_DIR}
-                             --exclude          ${CMAKE_SOURCE_DIR}/3rdparty
-			     --exclude          ${CMAKE_SOURCE_DIR}/Example
-                             --exclude          ${CMAKE_BINARY_DIR}
-                             --object-directory ${CMAKE_BINARY_DIR}
-                             --output           ${CMAKE_BINARY_DIR}/gcovr.html
-                             --html
-                             --html-details
-                             --sort-uncovered
-                             --print-summary
-                             --exclude-unreachable-branches
-			     --exclude-throw-branches
-            COMMAND echo "To display coverage report: firefox ${CMAKE_BINARY_DIR}/gcovr.html"
-         ) 
-	add_custom_target (coverage-json
-	    COMMAND make test
-            COMMAND ${gcovr} --root             ${CMAKE_SOURCE_DIR}
-                             --exclude          ${CMAKE_SOURCE_DIR}/3rdparty
-			     --exclude          ${CMAKE_SOURCE_DIR}/Example
-                             --exclude          ${CMAKE_BINARY_DIR}
-                             --object-directory ${CMAKE_BINARY_DIR}
-                             --sort-uncovered
-                             --print-summary
-                             --exclude-unreachable-branches
-			     --exclude-throw-branches
-			     --json 
-			     --output coverallis.json
-	)
-	add_custom_target (coverage-cli
-	    COMMAND make test
-            COMMAND ${gcovr} --root             ${CMAKE_SOURCE_DIR}
-                             --exclude          ${CMAKE_SOURCE_DIR}/3rdparty
-			     --exclude          ${CMAKE_SOURCE_DIR}/Example
-                             --exclude          ${CMAKE_BINARY_DIR}
-                             --object-directory ${CMAKE_BINARY_DIR}
-                             --sort-uncovered
-                             --print-summary
-                             --exclude-unreachable-branches
-			     --exclude-throw-branches
-         ) 
+    if (valgrind)
+        message(STATUS "Found command 'valgrand' => Use target 'test_memory' to perform memory test")
+        add_custom_target( test_memory
+            COMMAND valgrind -v --run-cxx-freeres=yes --run-libc-freeres=yes make test 
+        )
     else()
-	 message(FATAL_ERROR "Cannot find command 'gcovr' => Please install package 'gcovr' to generate code coverage report (JSON, CLI, HTML)")
+        message(WARNING "Cannot find command 'valgrand' => Please install package 'valgrand' to run memory tests")
     endif()
 
-    if(lcov)
-	add_custom_target (coverage-lcov
-	    COMMAND make test
-	    COMMAND echo "======= ${PROJECT_DIR} =============="
-            COMMAND ${lcov}  --capture
-	                     --directory        ${CMAKE_BINARY_DIR}
-			     --base-directory   ${CMAKE_SOURCE_DIR}
-                             --output-file      ${CMAKE_BINARY_DIR}/coverage.info
-			     --rc               lcov_branch_coverage=1
-            COMMAND ${lcov}  --remove ${CMAKE_BINARY_DIR}/coverage.info '/usr/include/*' 
-	                     --output ${CMAKE_BINARY_DIR}/coverage.info
-            COMMAND ${lcov}  --remove ${CMAKE_BINARY_DIR}/coverage.info '*/build/googletest-install/*' 
-	                     --output ${CMAKE_BINARY_DIR}/coverage.info
-            COMMAND ${lcov}  --list   ${CMAKE_BINARY_DIR}/coverage.info 
-         ) 
-    else()
-	    message(WARNING "Cannot find command 'lcov' => Please install package 'lcov' to generate code coverage report (Coveralls)")
-    endif()
-endif()
+    ##########
+    # Coverage
+    ##########
 
+    if( CMAKE_BUILD_TYPE STREQUAL "Coverage" )
+        if( NOT CMAKE_COMPILER_IS_GNUCXX AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang" )
+            message(WARNING "Coverage not yet implemented for your compiler '${CMAKE_CXX_COMPILER_ID}' (only GNU and Clang)")
+            return()
+        endif()
+
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
+
+        find_program (gcovr gcovr)
+        find_program (lcov lcov)
+
+        if (gcovr)
+        message (STATUS "Found command 'gcovr' => Use target 'coverage-html' or 'coverage-cli' to generate coverage report '${CMAKE_BINARY_DIR}/gcovr.html'")
+        add_custom_target (coverage-html
+            COMMAND make test
+                COMMAND ${gcovr} --root             ${CMAKE_SOURCE_DIR}
+                                --exclude          ${CMAKE_SOURCE_DIR}/3rdparty
+                    --exclude          ${CMAKE_SOURCE_DIR}/Example
+                                --exclude          ${CMAKE_BINARY_DIR}
+                                --object-directory ${CMAKE_BINARY_DIR}
+                                --output           ${CMAKE_BINARY_DIR}/gcovr.html
+                                --html
+                                --html-details
+                                --sort-uncovered
+                                --print-summary
+                                --exclude-unreachable-branches
+                    --exclude-throw-branches
+                COMMAND echo "To display coverage report: firefox ${CMAKE_BINARY_DIR}/gcovr.html"
+            ) 
+        add_custom_target (coverage-json
+            COMMAND make test
+                COMMAND ${gcovr} --root             ${CMAKE_SOURCE_DIR}
+                                --exclude          ${CMAKE_SOURCE_DIR}/3rdparty
+                    --exclude          ${CMAKE_SOURCE_DIR}/Example
+                                --exclude          ${CMAKE_BINARY_DIR}
+                                --object-directory ${CMAKE_BINARY_DIR}
+                                --sort-uncovered
+                                --print-summary
+                                --exclude-unreachable-branches
+                    --exclude-throw-branches
+                    --json 
+                    --output coverallis.json
+        )
+        add_custom_target (coverage-cli
+            COMMAND make test
+                COMMAND ${gcovr} --root             ${CMAKE_SOURCE_DIR}
+                                --exclude          ${CMAKE_SOURCE_DIR}/3rdparty
+                    --exclude          ${CMAKE_SOURCE_DIR}/Example
+                                --exclude          ${CMAKE_BINARY_DIR}
+                                --object-directory ${CMAKE_BINARY_DIR}
+                                --sort-uncovered
+                                --print-summary
+                                --exclude-unreachable-branches
+                    --exclude-throw-branches
+            ) 
+        else()
+        message(FATAL_ERROR "Cannot find command 'gcovr' => Please install package 'gcovr' to generate code coverage report (JSON, CLI, HTML)")
+        endif()
+
+        if(lcov)
+        add_custom_target (coverage-lcov
+            COMMAND make test
+            COMMAND echo "======= ${PROJECT_DIR} =============="
+                COMMAND ${lcov}  --capture
+                            --directory        ${CMAKE_BINARY_DIR}
+                    --base-directory   ${CMAKE_SOURCE_DIR}
+                                --output-file      ${CMAKE_BINARY_DIR}/coverage.info
+                    --rc               lcov_branch_coverage=1
+                COMMAND ${lcov}  --remove ${CMAKE_BINARY_DIR}/coverage.info '/usr/include/*' 
+                            --output ${CMAKE_BINARY_DIR}/coverage.info
+                COMMAND ${lcov}  --remove ${CMAKE_BINARY_DIR}/coverage.info '*/build/googletest-install/*' 
+                            --output ${CMAKE_BINARY_DIR}/coverage.info
+                COMMAND ${lcov}  --list   ${CMAKE_BINARY_DIR}/coverage.info 
+            ) 
+        else()
+            message(WARNING "Cannot find command 'lcov' => Please install package 'lcov' to generate code coverage report (Coveralls)")
+        endif()
+    endif()
+endif(BUILD_TEST)
 ###########
 # Documents
 ###########
-option(BUILD_DOC "Build documentation" OFF)
 
 # check if Doxygen is installed
 if(BUILD_DOC)
